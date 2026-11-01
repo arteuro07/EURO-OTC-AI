@@ -198,7 +198,7 @@ class CaptureService : Service() {
     private fun showBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = TextView(this).apply {
-            text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $frameCount\nOCR : $lastOcrText\nNO SIGNAL"
+            text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $frameCount\n$lastChartObservation\nOCR : $lastOcrText\nNO SIGNAL"
             textSize = 12f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xEE17212B.toInt())
