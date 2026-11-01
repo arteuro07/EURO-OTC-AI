@@ -43,7 +43,8 @@ class CaptureService : Service() {
     private var frameThread: HandlerThread? = null
     private var frameCount = 0L
     @Volatile private var ocrBusy = false
-    private var lastOcrText = "En attente du premier texte"\n    private var lastChartObservation = "Calibration visuelle en attente"
+    private var lastOcrText = "En attente du premier texte"
+    private var lastChartObservation = "Calibration visuelle en attente"
     private var selectedAsset = "Actif non sélectionné"
     private var selectedTimeframe = "M1"
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -141,6 +142,12 @@ class CaptureService : Service() {
     private fun runOcr(bitmap: Bitmap) {
         ocrBusy = true
         try {
+            val observation = ChartFrameAnalyzer.analyze(bitmap)
+            lastChartObservation = "Couleurs chart : R ${observation.redColumns} / V ${observation.greenColumns} colonnes"
+        } catch (_: Exception) {
+            lastChartObservation = "Analyse visuelle indisponible"
+        }
+        try {
             recognizer.process(InputImage.fromBitmap(bitmap, 0))
                 .addOnSuccessListener { result ->
                     val candidates = result.textBlocks
@@ -184,7 +191,7 @@ class CaptureService : Service() {
 
     private fun updateBubble() {
         val count = frameCount
-        val text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $count\nOCR : $lastOcrText\nNO SIGNAL"
+        val text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $count\n$lastChartObservation\nOCR : $lastOcrText\nNO SIGNAL"
         mainHandler.post { bubble?.text = text }
     }
 
