@@ -6,13 +6,18 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.TextView
 
 class MainActivity : Activity() {
     private val captureRequest = 4102
     private lateinit var status: TextView
+    private lateinit var assetSpinner: Spinner
+    private lateinit var timeframeSpinner: Spinner
     private val projectionManager by lazy { getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,19 +33,37 @@ class MainActivity : Activity() {
             setTextColor(0xFFFFFFFF.toInt())
             setPadding(0, 12, 0, 12)
         }
+        fun spinner(items: List<String>): Spinner {
+            return Spinner(this).apply {
+                adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, items).also {
+                    it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+        }
+
         root.addView(label("EURO OTC AI", 28f))
         root.addView(label("Assistant d’observation du graphique Pocket Option"))
+        root.addView(label("Actif affiché sur Pocket Option"))
+        assetSpinner = spinner(listOf("EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC", "AUD/USD OTC", "Autre OTC"))
+        root.addView(assetSpinner)
+        root.addView(label("Unité de temps principale"))
+        timeframeSpinner = spinner(listOf("M1", "M5", "M15"))
+        root.addView(timeframeSpinner)
+
         status = label("État : prêt\nAucun signal validé.")
         root.addView(status)
-        val overlay = Button(this).apply {
+        root.addView(Button(this).apply {
             text = "1. Autoriser la bulle flottante"
             setOnClickListener {
                 if (!Settings.canDrawOverlays(this@MainActivity)) {
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                 } else status.text = "Bulle flottante autorisée."
             }
-        }
-        root.addView(overlay)
+        })
         root.addView(Button(this).apply {
             text = "2. Démarrer la capture d’écran"
             setOnClickListener {
@@ -51,9 +74,12 @@ class MainActivity : Activity() {
         })
         root.addView(Button(this).apply {
             text = "Arrêter l’assistant"
-            setOnClickListener { stopService(Intent(this@MainActivity, CaptureService::class.java)); status.text = "Assistant arrêté." }
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, CaptureService::class.java))
+                status.text = "Assistant arrêté."
+            }
         })
-        root.addView(label("Important : la capture observe uniquement les pixels visibles. Elle ne donne pas accès au flux OTC interne ni aux cotations serveur. Tant que la lecture du graphique n’est pas validée, le résultat reste NO SIGNAL."))
+        root.addView(label("Sélectionne le même actif et la même unité de temps que sur Pocket Option. La capture observe uniquement les pixels visibles ; elle ne lit pas le flux OTC interne. Tant que la lecture des bougies n’est pas validée, le résultat reste NO SIGNAL."))
         setContentView(root)
     }
 
@@ -64,9 +90,11 @@ class MainActivity : Activity() {
             val service = Intent(this, CaptureService::class.java).apply {
                 putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode)
                 putExtra(CaptureService.EXTRA_DATA, data)
+                putExtra(CaptureService.EXTRA_ASSET, assetSpinner.selectedItem.toString())
+                putExtra(CaptureService.EXTRA_TIMEFRAME, timeframeSpinner.selectedItem.toString())
             }
             startForegroundService(service)
-            status.text = "Capture démarrée. Analyse : NO SIGNAL (lecture en validation)."
+            status.text = "Capture démarrée : ${assetSpinner.selectedItem} • ${timeframeSpinner.selectedItem}\nAnalyse : NO SIGNAL (lecture en validation)."
         }
     }
 }
