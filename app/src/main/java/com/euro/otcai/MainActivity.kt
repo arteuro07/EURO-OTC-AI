@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.Bundle
 import android.provider.Settings
 import android.view.ViewGroup
@@ -15,6 +16,7 @@ import android.widget.TextView
 
 class MainActivity : Activity() {
     private val captureRequest = 4102
+    private val exportRequest = 4103
     private lateinit var status: TextView
     private lateinit var assetSpinner: Spinner
     private lateinit var timeframeSpinner: Spinner
@@ -73,6 +75,21 @@ class MainActivity : Activity() {
             }
         })
         root.addView(Button(this).apply {
+            text = "Exporter le diagnostic CSV"
+            setOnClickListener {
+                if (!getFileStreamPath(DiagnosticsStore.FILE_NAME).exists() || getFileStreamPath(DiagnosticsStore.FILE_NAME).length() == 0L) {
+                    status.text = "Aucune donnée enregistrée pour le moment. Lance la capture d’abord."
+                } else {
+                    val export = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "text/csv"
+                        putExtra(Intent.EXTRA_TITLE, DiagnosticsStore.FILE_NAME)
+                    }
+                    startActivityForResult(export, exportRequest)
+                }
+            }
+        })
+        root.addView(Button(this).apply {
             text = "Arrêter l’assistant"
             setOnClickListener {
                 stopService(Intent(this@MainActivity, CaptureService::class.java))
@@ -86,6 +103,17 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated by Android but retained for compatibility with the screen-capture consent flow")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == exportRequest && resultCode == RESULT_OK && data?.data != null) {
+            try {
+                contentResolver.openOutputStream(data.data!!)?.use { output ->
+                    openFileInput(DiagnosticsStore.FILE_NAME).use { input -> input.copyTo(output) }
+                }
+                status.text = "Diagnostic CSV exporté. Tu peux joindre ce fichier à notre conversation."
+            } catch (error: Exception) {
+                status.text = "Échec de l’export : ${error.message ?: "erreur inconnue"}"
+            }
+            return
+        }
         if (requestCode == captureRequest && resultCode == RESULT_OK && data != null) {
             val service = Intent(this, CaptureService::class.java).apply {
                 putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode)
