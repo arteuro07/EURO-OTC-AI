@@ -143,7 +143,7 @@ class CaptureService : Service() {
         ocrBusy = true
         try {
             val observation = ChartFrameAnalyzer.analyze(bitmap)
-            lastChartObservation = "Couleurs chart : R ${observation.redColumns} / V ${observation.greenColumns} colonnes"
+            lastChartObservation = "Colonnes R/V : ${observation.redColumns}/${observation.greenColumns} • segments : ${observation.redSegments}/${observation.greenSegments}"
         } catch (_: Exception) {
             lastChartObservation = "Analyse visuelle indisponible"
         }
