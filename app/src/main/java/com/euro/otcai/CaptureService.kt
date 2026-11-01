@@ -5,9 +5,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -19,6 +21,10 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.util.Locale
 
 class CaptureService : Service() {
     companion object {
@@ -34,7 +40,12 @@ class CaptureService : Service() {
     private var windowManager: WindowManager? = null
     private var frameThread: HandlerThread? = null
     private var frameCount = 0L
+    @Volatile private var ocrBusy = false
+    private var lastOcrText = "En attente du premier texte"
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val recognizer by lazy {
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createChannel()
@@ -70,13 +81,14 @@ class CaptureService : Service() {
         )
         reader?.setOnImageAvailableListener({ source ->
             val image = source.acquireLatestImage() ?: return@setOnImageAvailableListener
-            image.close()
             frameCount += 1
+            if (frameCount % 45L == 0L && !ocrBusy) {
+                val bitmap = imageToBitmap(image)
+                if (bitmap != null) runOcr(bitmap)
+            }
+            image.close()
             if (frameCount == 1L || frameCount % 15L == 0L) {
-                val count = frameCount
-                mainHandler.post {
-                    bubble?.text = "EURO AI\nCAPTURE ACTIVE\nImages reçues : $count\nNO SIGNAL"
-                }
+                updateBubble()
             }
         }, Handler(frameThread!!.looper))
 
@@ -94,15 +106,87 @@ class CaptureService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun imageToBitmap(image: Image): Bitmap? {
+        return try {
+            val plane = image.planes.firstOrNull() ?: return null
+            val buffer = plane.buffer
+            val pixelStride = plane.pixelStride
+            val rowStride = plane.rowStride
+            if (pixelStride <= 0) return null
+            val paddedWidth = rowStride / pixelStride
+            val full = Bitmap.createBitmap(
+                paddedWidth,
+                image.height,
+                Bitmap.Config.ARGB_8888
+            )
+            buffer.rewind()
+            full.copyPixelsFromBuffer(buffer)
+            val cropped = if (paddedWidth != image.width) {
+                Bitmap.createBitmap(full, 0, 0, image.width, image.height).also {
+                    full.recycle()
+                }
+            } else full
+            cropped
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun runOcr(bitmap: Bitmap) {
+        ocrBusy = true
+        try {
+            recognizer.process(InputImage.fromBitmap(bitmap, 0))
+                .addOnSuccessListener { result ->
+                    val candidates = result.textBlocks
+                        .flatMap { it.lines }
+                        .map { it.text.trim() }
+                        .filter { line ->
+                            val upper = line.uppercase(Locale.ROOT)
+                            upper.contains("OTC") ||
+                                upper.contains("EUR") ||
+                                upper.contains("USD") ||
+                                upper.contains("M1") ||
+                                upper.contains("M5") ||
+                                upper.contains("M15") ||
+                                upper.contains("BUY") ||
+                                upper.contains("SELL") ||
+                                line.any { it.isDigit() }
+                        }
+                        .distinct()
+                        .take(2)
+                    lastOcrText = if (candidates.isEmpty()) {
+                        "Texte du graphique non identifié"
+                    } else {
+                        candidates.joinToString(" | ").take(90)
+                    }
+                    updateBubble()
+                }
+                .addOnFailureListener {
+                    lastOcrText = "Lecture OCR indisponible"
+                    updateBubble()
+                }
+                .addOnCompleteListener {
+                    bitmap.recycle()
+                    ocrBusy = false
+                }
+        } catch (_: Exception) {
+            bitmap.recycle()
+            ocrBusy = false
+            lastOcrText = "Lecture OCR indisponible"
+        }
+    }
+
+    private fun updateBubble() {
+        val count = frameCount
+        val text = "EURO AI\nCAPTURE ACTIVE\nImages reçues : $count\nOCR : $lastOcrText\nNO SIGNAL"
+        mainHandler.post { bubble?.text = text }
+    }
+
     private fun showBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = TextView(this).apply {
-            text = if (frameCount > 0L) {
-                "EURO AI\nCAPTURE ACTIVE\nImages reçues : $frameCount\nNO SIGNAL"
-            } else {
-                "EURO AI\nCAPTURE EN ATTENTE\nNO SIGNAL"
-            }
-            textSize = 13f
+            text = "EURO AI\nCAPTURE ACTIVE\nImages reçues : $frameCount\nOCR : $lastOcrText\nNO SIGNAL"
+            textSize = 12f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xEE17212B.toInt())
             setPadding(22, 16, 22, 16)
@@ -151,7 +235,7 @@ class CaptureService : Service() {
         }
         return builder
             .setContentTitle("EURO OTC AI actif")
-            .setContentText("Capture d’écran active • Aucun signal validé")
+            .setContentText("Capture et lecture OCR locales • Aucun signal validé")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setOngoing(true)
             .build()
@@ -167,6 +251,10 @@ class CaptureService : Service() {
         reader?.close()
         frameThread?.quitSafely()
         projection?.stop()
+        try {
+            recognizer.close()
+        } catch (_: Exception) {
+        }
         super.onDestroy()
     }
 
