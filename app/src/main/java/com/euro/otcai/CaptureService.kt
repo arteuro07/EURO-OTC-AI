@@ -30,6 +30,8 @@ class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_DATA = "result_data"
+        const val EXTRA_ASSET = "selected_asset"
+        const val EXTRA_TIMEFRAME = "selected_timeframe"
         private const val CHANNEL = "euro_otc_capture"
     }
 
@@ -42,6 +44,8 @@ class CaptureService : Service() {
     private var frameCount = 0L
     @Volatile private var ocrBusy = false
     private var lastOcrText = "En attente du premier texte"
+    private var selectedAsset = "Actif non sélectionné"
+    private var selectedTimeframe = "M1"
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -51,6 +55,8 @@ class CaptureService : Service() {
         createChannel()
         startForeground(7, notification())
 
+        selectedAsset = intent?.getStringExtra(EXTRA_ASSET) ?: "Actif non sélectionné"
+        selectedTimeframe = intent?.getStringExtra(EXTRA_TIMEFRAME) ?: "M1"
         val code = intent?.getIntExtra(EXTRA_RESULT_CODE, 0) ?: 0
         @Suppress("DEPRECATION")
         val data: Intent? = if (Build.VERSION.SDK_INT >= 33) {
@@ -178,14 +184,14 @@ class CaptureService : Service() {
 
     private fun updateBubble() {
         val count = frameCount
-        val text = "EURO AI\nCAPTURE ACTIVE\nImages reçues : $count\nOCR : $lastOcrText\nNO SIGNAL"
+        val text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $count\nOCR : $lastOcrText\nNO SIGNAL"
         mainHandler.post { bubble?.text = text }
     }
 
     private fun showBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = TextView(this).apply {
-            text = "EURO AI\nCAPTURE ACTIVE\nImages reçues : $frameCount\nOCR : $lastOcrText\nNO SIGNAL"
+            text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $frameCount\nOCR : $lastOcrText\nNO SIGNAL"
             textSize = 12f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xEE17212B.toInt())
