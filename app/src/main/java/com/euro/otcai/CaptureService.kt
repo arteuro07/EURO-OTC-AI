@@ -43,7 +43,7 @@ class CaptureService : Service() {
     private var frameThread: HandlerThread? = null
     private var frameCount = 0L
     @Volatile private var ocrBusy = false
-    private var lastOcrText = "En attente du premier texte"
+    private var lastOcrText = "En attente du premier texte"\n    private var lastChartObservation = "Calibration visuelle en attente"
     private var selectedAsset = "Actif non sélectionné"
     private var selectedTimeframe = "M1"
     private val mainHandler = Handler(Looper.getMainLooper())
