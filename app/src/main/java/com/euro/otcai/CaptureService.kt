@@ -172,10 +172,12 @@ class CaptureService : Service() {
                     } else {
                         candidates.joinToString(" | ").take(90)
                     }
+                    DiagnosticsStore.append(this, selectedAsset, selectedTimeframe, frameCount, redColumns, greenColumns, redSegments, greenSegments, lastOcrText, "OK")
                     updateBubble()
                 }
                 .addOnFailureListener {
                     lastOcrText = "Lecture OCR indisponible"
+                    DiagnosticsStore.append(this, selectedAsset, selectedTimeframe, frameCount, redColumns, greenColumns, redSegments, greenSegments, lastOcrText, "OCR_ERROR")
                     updateBubble()
                 }
                 .addOnCompleteListener {
@@ -186,6 +188,7 @@ class CaptureService : Service() {
             bitmap.recycle()
             ocrBusy = false
             lastOcrText = "Lecture OCR indisponible"
+            DiagnosticsStore.append(this, selectedAsset, selectedTimeframe, frameCount, redColumns, greenColumns, redSegments, greenSegments, lastOcrText, "OCR_ERROR")
         }
     }
 
