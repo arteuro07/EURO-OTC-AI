@@ -14,6 +14,8 @@ object ChartFrameAnalyzer {
         val greenColumns: Int,
         val redPixels: Int,
         val greenPixels: Int,
+        val redSegments: Int,
+        val greenSegments: Int,
         val sampledPixels: Int
     )
 
@@ -32,8 +34,9 @@ object ChartFrameAnalyzer {
         val right = (bitmap.width * RIGHT).toInt().coerceIn(left + 1, bitmap.width)
         val bottom = (bitmap.height * BOTTOM).toInt().coerceIn(top + 1, bitmap.height)
 
-        val columnRed = IntArray(right - left)
-        val columnGreen = IntArray(right - left)
+        val sampledWidth = ((right - left) + STEP - 1) / STEP
+        val columnRed = IntArray(sampledWidth)
+        val columnGreen = IntArray(sampledWidth)
         val hsv = FloatArray(3)
         var redPixels = 0
         var greenPixels = 0
@@ -41,6 +44,7 @@ object ChartFrameAnalyzer {
 
         var y = top
         while (y < bottom) {
+            var sampleX = 0
             var x = left
             while (x < right) {
                 val pixel = bitmap.getPixel(x, y)
@@ -53,21 +57,36 @@ object ChartFrameAnalyzer {
                     when {
                         hue <= 15f || hue >= 345f -> {
                             redPixels++
-                            columnRed[x - left]++
+                            columnRed[sampleX]++
                         }
                         hue in 75f..155f -> {
                             greenPixels++
-                            columnGreen[x - left]++
+                            columnGreen[sampleX]++
                         }
                     }
                 }
                 x += STEP
+                sampleX++
             }
             y += STEP
         }
 
-        val redColumns = columnRed.count { it >= MIN_PIXELS_PER_COLUMN }
-        val greenColumns = columnGreen.count { it >= MIN_PIXELS_PER_COLUMN }
-        return Observation(redColumns, greenColumns, redPixels, greenPixels, sampled)
+        val redActive = columnRed.map { it >= MIN_PIXELS_PER_COLUMN }
+        val greenActive = columnGreen.map { it >= MIN_PIXELS_PER_COLUMN }
+        val redColumns = redActive.count { it }
+        val greenColumns = greenActive.count { it }
+        fun countSegments(active: List<Boolean>): Int {
+            var segments = 0
+            var inside = false
+            for (isActive in active) {
+                if (isActive && !inside) segments++
+                inside = isActive
+            }
+            return segments
+        }
+        val redSegments = countSegments(redActive)
+        val greenSegments = countSegments(greenActive)
+        return Observation(redColumns, greenColumns, redPixels, greenPixels,
+            redSegments, greenSegments, sampled)
     }
 }
