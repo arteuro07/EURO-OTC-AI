@@ -33,8 +33,12 @@ class CaptureService : Service() {
         createChannel()
         startForeground(7, notification())
         val code = intent?.getIntExtra(EXTRA_RESULT_CODE, 0) ?: 0
-        val data = if (Build.VERSION.SDK_INT >= 33) intent?.getParcelableExtra(EXTRA_DATA, Intent::class.java)
-                   else @Suppress("DEPRECATION") intent?.getParcelableExtra(EXTRA_DATA)
+        @Suppress("DEPRECATION")
+        val data: Intent? = if (Build.VERSION.SDK_INT >= 33) {
+            intent?.getParcelableExtra(EXTRA_DATA, Intent::class.java)
+        } else {
+            intent?.getParcelableExtra(EXTRA_DATA)
+        }
         if (data == null) { stopSelf(); return START_NOT_STICKY }
         val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code, data)
