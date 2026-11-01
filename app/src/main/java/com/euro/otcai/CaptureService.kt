@@ -47,6 +47,12 @@ class CaptureService : Service() {
     private var lastChartObservation = "Calibration visuelle en attente"
     private var selectedAsset = "Actif non sélectionné"
     private var selectedTimeframe = "M1"
+    private var detectedAsset = "ACTIF NON CONFIRMÉ"
+    private var detectedTimeframe = "TIMEFRAME NON CONFIRMÉ"
+    private var assetCandidate = ""
+    private var timeframeCandidate = ""
+    private var assetCandidateCount = 0
+    private var timeframeCandidateCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -141,8 +147,16 @@ class CaptureService : Service() {
 
     private fun runOcr(bitmap: Bitmap) {
         ocrBusy = true
+        var redColumns = 0
+        var greenColumns = 0
+        var redSegments = 0
+        var greenSegments = 0
         try {
             val observation = ChartFrameAnalyzer.analyze(bitmap)
+            redColumns = observation.redColumns
+            greenColumns = observation.greenColumns
+            redSegments = observation.redSegments
+            greenSegments = observation.greenSegments
             lastChartObservation = "Colonnes R/V : ${observation.redColumns}/${observation.greenColumns} • segments : ${observation.redSegments}/${observation.greenSegments}"
         } catch (_: Exception) {
             lastChartObservation = "Analyse visuelle indisponible"
@@ -167,6 +181,7 @@ class CaptureService : Service() {
                         }
                         .distinct()
                         .take(2)
+                    updateDetectedMarket(result.text)
                     lastOcrText = if (candidates.isEmpty()) {
                         "Texte du graphique non identifié"
                     } else {
@@ -192,16 +207,41 @@ class CaptureService : Service() {
         }
     }
 
+    private fun updateDetectedMarket(rawText: String) {
+        val normalized = rawText.uppercase(Locale.ROOT)
+            .replace(" ", "")
+            .replace("-", "/")
+        val assetRegex = Regex("\\b(EUR|GBP|AUD|NZD|USD|CAD|CHF|JPY)/(EUR|GBP|AUD|NZD|USD|CAD|CHF|JPY)(OTC)?\\b")
+        val assetMatch = assetRegex.find(normalized)
+        val timeRegex = Regex("\\b(M1|M2|M3|M4|M5|M10|M15|M30|H1|H2|H4|D1)\\b")
+        val timeMatch = timeRegex.find(normalized)
+
+        assetMatch?.value?.let { found ->
+            if (found == assetCandidate) assetCandidateCount++ else {
+                assetCandidate = found
+                assetCandidateCount = 1
+            }
+            if (assetCandidateCount >= 2) detectedAsset = found
+        }
+        timeMatch?.value?.let { found ->
+            if (found == timeframeCandidate) timeframeCandidateCount++ else {
+                timeframeCandidate = found
+                timeframeCandidateCount = 1
+            }
+            if (timeframeCandidateCount >= 2) detectedTimeframe = found
+        }
+    }
+
     private fun updateBubble() {
         val count = frameCount
-        val text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $count\n$lastChartObservation\nOCR : $lastOcrText\nNO SIGNAL"
+        val text = "EURO AI\n$detectedAsset • $detectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $count\n$lastChartObservation\nOCR : $lastOcrText\nNO SIGNAL"
         mainHandler.post { bubble?.text = text }
     }
 
     private fun showBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = TextView(this).apply {
-            text = "EURO AI\n$selectedAsset • $selectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $frameCount\n$lastChartObservation\nOCR : $lastOcrText\nNO SIGNAL"
+            text = "EURO AI\n$detectedAsset • $detectedTimeframe\nCAPTURE ACTIVE\nImages reçues : $frameCount\n$lastChartObservation\nOCR : $lastOcrText\nNO SIGNAL"
             textSize = 12f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xEE17212B.toInt())
