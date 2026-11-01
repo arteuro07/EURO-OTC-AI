@@ -9,8 +9,8 @@ android {
         applicationId = "com.euro.otcai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
     buildFeatures { viewBinding = false }
     compileOptions {
@@ -18,4 +18,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+}
+dependencies {
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
